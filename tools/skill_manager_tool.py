@@ -832,19 +832,65 @@ def skill_manage(
     """
     if action == "create":
         if not content:
+            if file_content:
+                return tool_error(
+                    "Use 'content' (not 'file_content') for action='create'. "
+                    "The 'content' parameter holds the SKILL.md text; "
+                    "'file_content' is only for action='write_file'. "
+                    "Re-call with the SKILL.md text under 'content'.",
+                    success=False,
+                )
             return tool_error("content is required for 'create'. Provide the full SKILL.md text (frontmatter + body).", success=False)
         result = _create_skill(name, content, category)
 
     elif action == "edit":
         if not content:
+            if file_content:
+                return tool_error(
+                    "Use 'content' (not 'file_content') for action='edit'. "
+                    "The 'content' parameter holds the SKILL.md text; "
+                    "'file_content' is only for action='write_file'. "
+                    "Re-call with the updated SKILL.md text under 'content'.",
+                    success=False,
+                )
             return tool_error("content is required for 'edit'. Provide the full updated SKILL.md text.", success=False)
         result = _edit_skill(name, content)
 
     elif action == "patch":
         if not old_string:
-            return tool_error("old_string is required for 'patch'. Provide the text to find.", success=False)
+            # Catch empty strings too (not just None) — some models send "" by default
+            wrong_param = None
+            if file_content is not None and file_content != "":
+                wrong_param = "file_content"
+            elif content is not None and content != "":
+                wrong_param = "content"
+            if wrong_param:
+                return tool_error(
+                    f"action='patch' requires TWO parameters: 'old_string' (the exact text to find) "
+                    f"and 'new_string' (the replacement text). You provided '{wrong_param}', "
+                    f"but patch does NOT take a single content blob — it surgically replaces a "
+                    f"snippet inside an existing file. "
+                    f"If you meant to overwrite the whole SKILL.md, use action='edit' with the full "
+                    f"new SKILL.md text in 'content' instead. "
+                    f"If you meant to edit a section, re-call with action='patch', "
+                    f"old_string=<exact existing snippet>, new_string=<replacement snippet>.",
+                    success=False,
+                )
+            return tool_error(
+                "old_string is required for 'patch'. action='patch' surgically replaces a snippet "
+                "inside an existing file. You must provide BOTH 'old_string' (the EXACT text in the "
+                "file you want to replace, character-perfect) AND 'new_string' (the replacement "
+                "text — use empty string to delete). "
+                "If you wanted to overwrite the entire SKILL.md, use action='edit' with the full "
+                "new content in the 'content' parameter instead.",
+                success=False,
+            )
         if new_string is None:
-            return tool_error("new_string is required for 'patch'. Use empty string to delete matched text.", success=False)
+            return tool_error(
+                "new_string is required for 'patch'. Use empty string to delete the matched text. "
+                "Reminder: action='patch' replaces old_string with new_string in the file.",
+                success=False,
+            )
         result = _patch_skill(name, old_string, new_string, file_path, replace_all)
 
     elif action == "delete":
@@ -854,6 +900,14 @@ def skill_manage(
         if not file_path:
             return tool_error("file_path is required for 'write_file'. Example: 'references/api-guide.md'", success=False)
         if file_content is None:
+            if content:
+                return tool_error(
+                    "Use 'file_content' (not 'content') for action='write_file'. "
+                    "'content' is only for action='create'/'edit' (the SKILL.md itself); "
+                    "'file_content' holds the body of an arbitrary file in the skill dir. "
+                    "Re-call with the file body under 'file_content'.",
+                    success=False,
+                )
             return tool_error("file_content is required for 'write_file'.", success=False)
         result = _write_file(name, file_path, file_content)
 
